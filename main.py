@@ -11,7 +11,7 @@ import json
 PRICE_MIN, PRICE_MAX = 0.5, 5
 FLOAT_MAX_M           = 10
 TP_PCT, SL_PCT        = 0.10, 0.05            # +10%, -5%
-DRIVE_FOLDER_ID       = "YOUR_GOOGLE_DRIVE_FOLDER_ID"  # ← ★★★ここの書き換えが必要です！★★★
+DRIVE_FOLDER_ID       = "Y10MiYwSllMX-KhzmeoZitWMXf2_QEq6BG"  # ← ★★★ここの書き換えが必要です！★★★
 HOOK                  = os.getenv("DISCORD_HOOK")
 
 # 1) Google Drive 認証 -----------------
