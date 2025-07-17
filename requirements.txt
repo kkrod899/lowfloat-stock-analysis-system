@@ -1,4 +1,6 @@
 pandas==2.2.2
 requests
 yfinance
-pydrive2
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
