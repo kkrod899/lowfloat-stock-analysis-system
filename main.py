@@ -21,13 +21,14 @@ if not sa_json_string:
     raise ValueError("Secret GDRIVE_SA_JSON not found. Please set it in GitHub Secrets.")
 sa_dict = json.loads(sa_json_string)
 
-g_auth = GoogleAuth()
+# PyDrive2ではなく、より基本的なgoogle-authライブラリで認証情報を作成する
+from google.oauth2.service_account import Credentials
 scope = ["https://www.googleapis.com/auth/drive"]
-g_auth.auth_method = 'service'
-g_auth.credentials = g_auth.get_credentials_from_service_account(
-    service_account_dict=sa_dict,
-    scopes=scope
-)
+credentials = Credentials.from_service_account_info(sa_dict, scopes=scope)
+
+# 作成した認証情報をPyDrive2に渡す
+g_auth = GoogleAuth()
+g_auth.credentials = credentials
 drive = GoogleDrive(g_auth)
 
 # --- Google Drive 操作関数 ---
