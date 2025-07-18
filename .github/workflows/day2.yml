@@ -3,16 +3,12 @@ name: Day-2 LowFloat
 on:
   schedule:
     - cron: '5 20 * * 1-5'
-    - cron: '5 21 * * 1-5'
-  
-  # ▼▼▼ここからが手動実行のための設定▼▼▼
   workflow_dispatch:
     inputs:
       step_to_run:
-        description: 'テスト実行するステップ (A or B)。スケジュール実行時は空欄のまま。'
+        description: 'テスト実行するステップ (現在はAのみ)'
         required: false
-        default: '' # デフォルトは空
-  # ▲▲▲ここまでが追加部分▲▲▲
+        default: 'A'
 
 jobs:
   run:
@@ -23,11 +19,17 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies and Run script
+        id: run_script # このステップにIDを付ける
         run: |
           pip install -r requirements.txt
           python main.py
         env:
           DISCORD_HOOK:  ${{ secrets.DISCORD_HOOK }}
-          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
-          # ▼▼▼手動実行の選択をプログラムに伝えるための設定▼▼▼
           MANUAL_STEP: ${{ github.event.inputs.step_to_run }}
+      
+      # ★★★ここが新しい部分★★★
+      - name: Upload Watchlist as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchlist-csv
+          path: output/prev100_*.csv
