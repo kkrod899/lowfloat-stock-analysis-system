@@ -22,15 +22,24 @@ HOOK                  = os.getenv("DISCORD_HOOK")
 SCOPES                = ['https://www.googleapis.com/auth/drive']
 
 # ===================================================================
-# 1) Google Drive 認証 & サービス準備
+# 1) Google Drive 認証 & サービス準備 【最終FIX：なりすまし強制版】
 # ===================================================================
 sa_json_string = os.getenv("GDRIVE_SA_JSON")
 if not sa_json_string:
     raise ValueError("GitHubのSecretsにGDRIVE_SA_JSONが見つかりません。")
 sa_dict = json.loads(sa_json_string)
 
+# ★★★ここからが最終FIX部分★★★
+# 代理操作を行う、あなた自身のGmailアドレスを指定
+DELEGATED_USER_EMAIL = "kkrod.test899@gmail.com" 
+
+# あなたの代理として動作する認証情報を作成する
 credentials = Credentials.from_service_account_info(sa_dict, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=credentials)
+scoped_credentials = credentials.with_subject(DELEGATED_USER_EMAIL)
+
+# その認証情報を使って、Google Driveサービスを準備する
+drive_service = build('drive', 'v3', credentials=scoped_credentials)
+# ★★★ここまで★★★
 
 # --- Google Drive 操作のための便利関数 ---
 def find_file_id(name, folder_id):
