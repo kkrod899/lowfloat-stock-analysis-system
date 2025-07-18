@@ -2,34 +2,33 @@ name: Day-2 LowFloat
 
 on:
   schedule:
+    # 日本時間 AM 05:05 に仕事Aを実行
     - cron: '5 20 * * 1-5'
+    # 日本時間 AM 06:05 に仕事Bを実行
+    - cron: '5 21 * * 1-5'
+  
   workflow_dispatch:
     inputs:
       step_to_run:
-        description: 'テスト実行するステップ (現在はAのみ)'
+        # ★★★ここの説明文を修正しました★★★
+        description: 'テスト実行するステップ (A or B)'
         required: false
-        default: 'A'
+        default: ''
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install dependencies and Run script
-        id: run_script # このステップにIDを付ける
         run: |
           pip install -r requirements.txt
           python main.py
         env:
           DISCORD_HOOK:  ${{ secrets.DISCORD_HOOK }}
           MANUAL_STEP: ${{ github.event.inputs.step_to_run }}
-      
-      # ★★★ここが新しい部分★★★
-      - name: Upload Watchlist as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: watchlist-csv
-          path: output/prev100_*.csv
