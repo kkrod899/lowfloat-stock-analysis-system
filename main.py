@@ -38,7 +38,6 @@ if is_step_a:
         all_tables = pd.read_html(StringIO(html_content))
         df = all_tables[-2]
         
-        # 正しいヘッダーを直接設定し、ヘッダー行だった0行目を削除
         df.columns = ['No.', 'Ticker', 'Company', 'Sector', 'Industry', 'Country', 'Market Cap', 'P/E', 'Price', 'Change', 'Volume']
         df = df.iloc[1:].reset_index(drop=True)
         
@@ -53,7 +52,6 @@ else:
     # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
-        # outputフォルダ内のprev100_で始まる最新のファイルを探す
         watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
         
         if not watchlist_files:
@@ -65,7 +63,6 @@ else:
         
         df = pd.read_csv(latest_file)
         
-        # 数値データの前処理
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
         if 'Float' in df.columns:
             df['Float'] = df['Float'].str.replace('M','', regex=False)
@@ -75,21 +72,15 @@ else:
             print("警告: 'Float'列が見つかりません。Floatでの絞り込みはスキップされます。")
             df = df.dropna(subset=['Price'])
 
-        # ★★★ここからが最終修正部分★★★
-        # 条件で銘柄を絞り込み
-        # まずはPriceで絞り込む
+        # ★★★ここが最新のロジックです★★★
         df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}")
 
-        # Float列が存在する場合だけ、さらにFloatで絞り込む
         if 'Float' in df_watch.columns:
             df_watch = df_watch.query(f"Float <= {FLOAT_MAX_M}")
         
-        # 最後に上位10件を取得
         df_watch = df_watch.nlargest(10, 'Price')
-        # ★★★ここまで★★★
         
         if not df_watch.empty:
-            # Discordに通知
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
             
             if 'Float' in df_watch.columns:
@@ -101,7 +92,6 @@ else:
 
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + table + "```"})
 
-            # 仮想取引と結果記録
             rows = []
             result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
 
