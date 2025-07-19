@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: '5 20 * * 1-5'
     - cron: '5 21 * * 1-5'
-  
   workflow_dispatch:
     inputs:
       step_to_run:
@@ -21,15 +20,15 @@ jobs:
         with:
           python-version: '3.11'
       
-      # 仕事Bの場合だけ、最新の仕事AのArtifactsをダウンロードする
-      - name: Download Watchlist Artifact (for Step B)
+      # 仕事Bの場合だけ、Artifactsをダウンロードする
+      - name: Download Artifacts (for Step B)
         if: ${{ github.event.inputs.step_to_run == 'B' || github.event_name == 'schedule' }}
-        uses: actions/download-artifact@v4 # ★ 公式アクションの最新版v4を使う
+        uses: actions/download-artifact@v4
         with:
           name: analysis-artifacts
           path: output
-
-
+        # 実行に失敗しても、エラーで止めない（最初の実行など、Artifactsがない場合があるため）
+        continue-on-error: true
 
       - name: Install and Run
         run: |
@@ -39,9 +38,8 @@ jobs:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
           MANUAL_STEP: ${{ github.event.inputs.step_to_run }}
 
-      # 仕事Aの場合だけ、ファイルをArtifactsとしてアップロードする
-      - name: Upload Watchlist & Results Artifacts
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }} # 常にアップロードする
+      # 常にArtifactsをアップロードする
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: analysis-artifacts
