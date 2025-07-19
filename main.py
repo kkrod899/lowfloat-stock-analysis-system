@@ -33,7 +33,7 @@ if is_step_a:
     print("仕事A：Finvizからデータを取得します...")
     try:
         # ★★★ URLに表示列を指定するパラメータ(&c=...)を追加 ★★★
-        url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change&c=0,1,2,3,4,5,6,7,8,9,10,11"
+        url = "https://finviz.com/screener.ashx?v=152&f=ta_perf_d100o&c=0,1,2,3,4,5,6,7,8,9,10,65"
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
         df = pd.read_html(StringIO(html))[-2]
         
