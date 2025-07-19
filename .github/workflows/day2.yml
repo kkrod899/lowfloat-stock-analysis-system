@@ -20,6 +20,7 @@ jobs:
           python step_b_notify.py
         env:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: analysis-artifacts
