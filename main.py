@@ -6,45 +6,47 @@ import yfinance as yf
 import json
 from io import StringIO
 import glob
+from bs4 import BeautifulSoup # 新しいライブラリ
 
 # ===================================================================
 # 0) 定数
 # ===================================================================
 PRICE_MIN, PRICE_MAX = 0.5, 5
-# Floatでの絞り込みは行わないため、FLOAT_MAX_Mはコメントアウト
-# FLOAT_MAX_M           = 10 
-TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
 OUTPUT_DIR            = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+TP_PCT, SL_PCT        = 0.10, 0.05
 
 # ===================================================================
 # 1) Step 判定 & 実行
 # ===================================================================
 manual_step = os.getenv("MANUAL_STEP")
-
-is_step_a = False
-if not manual_step:
-    UTC_NOW = dt.datetime.utcnow()
-    is_step_a = dt.time(20, 0) <= UTC_NOW.time() < dt.time(21, 0)
-else:
-    is_step_a = (manual_step.upper() == 'A')
+is_step_a = (manual_step.upper() == 'A') if manual_step else (dt.time(20, 0) <= dt.datetime.utcnow().time() < dt.time(21, 0))
 
 if is_step_a:
     print("仕事A：Finvizからデータを取得します...")
     try:
         url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change"
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
-        df = pd.read_html(StringIO(html))[-2]
+        soup = BeautifulSoup(html, 'html.parser')
         
-        # ★★★【最重要】1行目をヘッダーとして設定し、その行をデータから削除する★★★
-        df.columns = df.iloc[0]
-        df = df.drop(0).reset_index(drop=True)
+        # HTMLから直接テーブルデータを抽出する
+        table = soup.find('table', {'class': 'screener_table'})
+        rows = []
+        # ヘッダー行を抽出
+        headers = [header.text.strip() for header in table.find_all('th')]
         
+        for row in table.find_all('tr')[1:]: # ヘッダー行を除いてループ
+            cols = [col.text.strip() for col in row.find_all('td')]
+            if len(cols) == len(headers):
+                rows.append(cols)
+        
+        df = pd.DataFrame(rows, columns=headers)
+
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
         df.to_csv(file_path, index=False)
-        print(f"'{file_name}' をヘッダー付きでローカルに保存しました。")
+        print(f"'{file_name}' をローカルに保存しました。")
     except Exception as e:
         print(f"仕事Aでエラーが発生しました: {e}")
 else:
@@ -57,23 +59,18 @@ else:
         latest_file = max(watchlist_files, key=os.path.getctime)
         print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
         df = pd.read_csv(latest_file)
-        
-        # Price列のデータ型を数値に変換。変換できないものは削除
+
+        # これ以降のコードは、ヘッダーが正しく設定されていれば動くはず
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
         df.dropna(subset=['Price'], inplace=True)
-
-        # ★★★Priceでのみ絞り込む、シンプルなロジック★★★
-        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)]
-        df_watch = df_watch.nlargest(10, 'Price')
+        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].nlargest(10, 'Price')
         
         if not df_watch.empty:
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
-            
-            # Float列がないため、シンプルな通知に変更
             table_rows = [f"{row['Ticker']:<6}  ${row['Price']:<5.2f}" for index, row in df_watch.iterrows()]
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + "\n".join(table_rows) + "```"})
-
-            # (これ以降のシミュレーション部分は変更なし)
+            
+            # シミュレーション部分 (変更なし)
             rows = []
             result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
             for t in df_watch['Ticker']:
