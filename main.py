@@ -6,7 +6,7 @@ import yfinance as yf
 import json
 from io import StringIO
 import glob
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # ★★★ BeautifulSoupをインポート ★★★
 
 # ===================================================================
 # 0) 定数
@@ -27,6 +27,7 @@ is_step_a = (manual_step.upper() == 'A') if manual_step else (dt.time(20, 0) <= 
 if is_step_a:
     print("仕事A：Finvizからデータを取得します...")
     try:
+        # ★★★ BeautifulSoupを使った、確実なデータ取得 ★★★
         url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change"
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
         soup = BeautifulSoup(html, 'html.parser')
@@ -40,6 +41,7 @@ if is_step_a:
                 rows.append(cols)
         
         df = pd.DataFrame(rows, columns=headers)
+        # ★★★ ここまでがBeautifulSoupによる処理 ★★★
 
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
@@ -63,20 +65,17 @@ else:
         
         df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].copy()
 
-        # --- ★★★これが最後の修正です★★★ ---
-        try:
-            # まず、Floatでの絞り込みを試みる
+        # ★★★ .tolist()を使った、安全な判定ロジック ★★★
+        has_float_column = 'Float' in df.columns.tolist()
+        
+        if has_float_column:
+            print("'Float'列で絞り込みます。")
             df_watch['Float'] = df_watch['Float'].astype(str).str.replace('M','', regex=False)
             df_watch['Float'] = pd.to_numeric(df_watch['Float'], errors='coerce')
             df_watch.dropna(subset=['Float'], inplace=True)
             df_watch = df_watch[df_watch['Float'] <= FLOAT_MAX_M]
-            print("'Float'列で絞り込みました。")
-            has_float_column = True
-        except KeyError:
-            # もしFloat列がなければ、KeyErrorが発生するので、ここで捕まえる
-            print("警告: 'Float'列が見つかりません。Priceでのみ絞り込みます。")
-            has_float_column = False
-        # --- ★★★ここまで★★★ ---
+        else:
+            print("警告: 'Float'列が見つかりません。")
         
         df_watch = df_watch.nlargest(10, 'Price')
         
@@ -84,7 +83,7 @@ else:
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
             table_rows = []
             for index, row in df_watch.iterrows():
-                if has_float_column:
+                if has_float_column and 'Float' in row and pd.notna(row['Float']):
                     table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f} Float:{row['Float']:.1f}M")
                 else:
                     table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f}")
