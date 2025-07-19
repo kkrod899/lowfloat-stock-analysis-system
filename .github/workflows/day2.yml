@@ -2,9 +2,7 @@ name: Day-2 LowFloat Stock Analyzer
 
 on:
   schedule:
-    # 日本時間 AM 05:05 (UTC 20:05) に仕事Aを実行
     - cron: '5 20 * * 1-5'
-    # 日本時間 AM 06:05 (UTC 21:05) に仕事Bを実行
     - cron: '5 21 * * 1-5'
   
   workflow_dispatch:
@@ -30,6 +28,8 @@ jobs:
         with:
           name: analysis-artifacts
           path: output
+
+
 
       - name: Install and Run
         run: |
