@@ -38,13 +38,16 @@ if is_step_a:
         all_tables = pd.read_html(StringIO(html_content))
         df = all_tables[-2]
         
-        df.columns = df.iloc[0]
-        df = df.drop(0).reset_index(drop=True)
+        # ★★★ここが最終修正部分★★★
+        # 正しいヘッダーを直接設定し、ヘッダー行だった0行目を削除する
+        df.columns = ['No.', 'Ticker', 'Company', 'Sector', 'Industry', 'Country', 'Market Cap', 'P/E', 'Price', 'Change', 'Volume']
+        df = df.iloc[1:].reset_index(drop=True)
+        # ★★★ここまで★★★
         
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
         df.to_csv(file_path, index=False)
-        print(f"'{file_name}' をヘッダー付きでローカルに保存しました。")
+        print(f"'{file_name}' を正しいヘッダー付きでローカルに保存しました。")
         
     except Exception as e:
         print(f"仕事Aでエラーが発生しました: {e}")
@@ -52,37 +55,53 @@ else:
     # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
-        # outputフォルダ内のprev100_で始まるファイルを全てリストアップ
+        # outputフォルダ内のprev100_で始まる最新のファイルを探す
         watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
         
         if not watchlist_files:
             print("処理対象のウォッチリストファイルが見つかりません。")
             exit()
         
-        # 最も新しいファイルを特定
         latest_file = max(watchlist_files, key=os.path.getctime)
         print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
         
-        # 最新のファイルを読み込む
         df = pd.read_csv(latest_file)
         
-        # ★★★ここがデバッグ用の追加部分★★★
-        print(f"読み込んだCSVの列名: {df.columns.tolist()}")
-        # ★★★ここまで★★★
+        # 実際の列名を確認するためのデバッグコード（念のため残しておきます）
+        # print(f"読み込んだCSVの列名: {df.columns.tolist()}")
 
-        # 数値に変換できないデータをエラーとして処理し、エラーが出た行を削除
+        # 数値データの前処理
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
-        df['Float'] = df['Float'].str.replace('M','', regex=False)
-        df['Float'] = pd.to_numeric(df['Float'], errors='coerce')
-        df = df.dropna(subset=['Price', 'Float'])
-        
-        df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
+        # Float列が存在するか確認してから処理
+        if 'Float' in df.columns:
+            df['Float'] = df['Float'].str.replace('M','', regex=False)
+            df['Float'] = pd.to_numeric(df['Float'], errors='coerce')
+            df = df.dropna(subset=['Price', 'Float'])
+        else:
+            # Finvizの仕様変更でFloat列が取得できない場合も考慮
+            print("警告: 'Float'列が見つかりません。Floatでの絞り込みはスキップされます。")
+            df = df.dropna(subset=['Price'])
+
+
+        # 条件で銘柄を絞り込み
+        if 'Float' in df.columns:
+             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
+        else:
+             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}").nlargest(10, 'Price')
+
         
         if not df_watch.empty:
-            # Discordに監視リストを通知
+            # Discordに通知
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
-            table = "\n".join(f"{t:<6}  ${p:<5.2f} Float:{f:.1f}M"
-                              for t, p, f in zip(df_watch.Ticker, df_watch.Price, df_watch.Float))
+            
+            # Float列がない場合でもエラーにならないように配慮
+            if 'Float' in df_watch.columns:
+                table = "\n".join(f"{t:<6}  ${p:<5.2f} Float:{f:.1f}M"
+                                  for t, p, f in zip(df_watch.Ticker, df_watch.Price, df_watch.Float))
+            else:
+                table = "\n".join(f"{t:<6}  ${p:<5.2f}"
+                                  for t, p in zip(df_watch.Ticker, df_watch.Price))
+
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + table + "```"})
 
             # 仮想取引と結果記録
@@ -113,7 +132,6 @@ else:
             
             if rows:
                 df_results = pd.DataFrame(rows, columns=result_columns)
-                # results.csvに追記する（ファイルがなければ新規作成）
                 results_path = os.path.join(OUTPUT_DIR, "results.csv")
                 if os.path.exists(results_path):
                     df_old = pd.read_csv(results_path)
