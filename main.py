@@ -5,13 +5,14 @@ import requests
 import yfinance as yf
 import json
 from io import StringIO
+import glob # ファイル検索のために追加
 
 # ===================================================================
-# 0) 定数（チューニングはここを編集）
+# 0) 定数
 # ===================================================================
-PRICE_MIN, PRICE_MAX = 0.5, 5   # 絞り込む株価の範囲（ドル）
-FLOAT_MAX_M           = 10      # 絞り込む浮動株の上限（百万株）
-TP_PCT, SL_PCT        = 0.10, 0.05  # 利確+10%, 損切り-5%
+PRICE_MIN, PRICE_MAX = 0.5, 5
+FLOAT_MAX_M           = 10
+TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
 OUTPUT_DIR            = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -51,23 +52,27 @@ else:
     # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
-        # 昨日の日付のファイルを探す
-        yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
-        file_name = f"prev100_{yesterday}.csv"
-        file_path = os.path.join(OUTPUT_DIR, file_name)
+        # ★★★ここからが修正部分★★★
+        # outputフォルダ内のprev100_で始まるファイルを全てリストアップ
+        watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
         
-        if not os.path.exists(file_path):
-             # スケジュール実行の場合はファイルがないこともあるので正常終了
-            print(f"'{file_name}' が見つかりません。本日は処理対象がありません。")
-            exit() # ここでプログラムを終了
+        if not watchlist_files:
+            print("処理対象のウォッチリストファイルが見つかりません。")
+            exit()
         
-        # 昨日のデータを読み込んで、条件で絞り込む
-        df = pd.read_csv(file_path)
-        # 数値に変換できないデータをエラーとして処理
+        # 最も新しいファイルを特定
+        latest_file = max(watchlist_files, key=os.path.getctime)
+        print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
+        
+        # 最新のファイルを読み込む
+        df = pd.read_csv(latest_file)
+        # ★★★ここまで★★★
+
+        # 数値に変換できないデータをエラーとして処理し、エラーが出た行を削除
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
         df['Float'] = df['Float'].str.replace('M','', regex=False)
         df['Float'] = pd.to_numeric(df['Float'], errors='coerce')
-        df = df.dropna(subset=['Price', 'Float']) # エラーが出た行を削除
+        df = df.dropna(subset=['Price', 'Float'])
         
         df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
         
