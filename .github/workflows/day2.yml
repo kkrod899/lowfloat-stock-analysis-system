@@ -1,46 +1,40 @@
-name: Day-2 LowFloat Stock Analyzer
+name: Stock Analysis Workflow
 
 on:
-  schedule:
-    - cron: '5 20 * * 1-5'
-    - cron: '5 21 * * 1-5'
   workflow_dispatch:
-    inputs:
-      step_to_run:
-        description: 'テスト実行するステップ (A or B)'
-        required: false
-        default: ''
 
 jobs:
-  run:
+  fetch:
+    name: Step A - Fetch Watchlist
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      # 仕事Bの場合だけ、Artifactsをダウンロードする
-      - name: Download Artifacts (for Step B)
-        if: ${{ github.event.inputs.step_to_run == 'B' || github.event_name == 'schedule' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: analysis-artifacts
-          path: output
-        # 実行に失敗しても、エラーで止めない（最初の実行など、Artifactsがない場合があるため）
-        continue-on-error: true
-
+        with: { python-version: '3.11' }
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          python main.py
-        env:
-          DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
-          MANUAL_STEP: ${{ github.event.inputs.step_to_run }}
-
-      # 常にArtifactsをアップロードする
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+          python step_a_fetch.py
+      - uses: actions/upload-artifact@v4
         with:
           name: analysis-artifacts
           path: output/
+
+  notify:
+    name: Step B - Notify and Simulate
+    runs-on: ubuntu-latest
+    needs: fetch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: analysis-artifacts
+          path: output
+      - name: Install and Run
+        run: |
+          pip install -r requirements.txt
+          python step_b_notify.py
+        env:
+          DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
