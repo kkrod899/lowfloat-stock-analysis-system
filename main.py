@@ -30,23 +30,27 @@ else:
     is_step_a = (manual_step.upper() == 'A')
 
 if is_step_a:
+    # === Step-A (引け後処理) の実行 ===
     print("仕事A：Finvizからデータを取得します...")
     try:
-        # ★★★ URLに表示列を指定するパラメータ(&c=...)を追加 ★★★
-        url = "https://finviz.com/screener.ashx?v=152&f=ta_perf_d100o&c=0,1,2,3,4,5,6,7,8,9,10,65"
-        html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
-        df = pd.read_html(StringIO(html))[-2]
+        url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change" # シンプルなURLに戻します
+        html_content = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
+        all_tables = pd.read_html(StringIO(html_content))
+        df = all_tables[-2]
         
-        df.columns = df.iloc[0]
-        df = df.drop(0).reset_index(drop=True)
+        # ★★★ここが、v3.5で実装した、正しいヘッダー設定ロジックです★★★
+        df.columns = ['No.', 'Ticker', 'Company', 'Sector', 'Industry', 'Country', 'Market Cap', 'P/E', 'Price', 'Change', 'Volume']
+        df = df.iloc[1:].reset_index(drop=True)
         
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
         df.to_csv(file_path, index=False)
         print(f"'{file_name}' を正しいヘッダー付きでローカルに保存しました。")
+        
     except Exception as e:
         print(f"仕事Aでエラーが発生しました: {e}")
 else:
+    # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
         watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
@@ -60,7 +64,7 @@ else:
         
         df = pd.read_csv(latest_file)
         
-        # ★★★ 判定ロジックをより堅牢なものに修正 ★★★
+        # これ以降の仕事Bのロジックは、v3.6/v3.7で完成しているので、変更ありません
         has_float_column = 'Float' in df.columns
         
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
@@ -70,7 +74,7 @@ else:
             df = df.dropna(subset=['Price', 'Float'])
             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
         else:
-            print("警告: 'Float'列が見つかりません。Priceでのみ絞り込みます。")
+            print("警告: CSVに'Float'列がありません。Priceでのみ絞り込みます。")
             df = df.dropna(subset=['Price'])
             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}").nlargest(10, 'Price')
         
