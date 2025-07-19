@@ -30,26 +30,23 @@ else:
     is_step_a = (manual_step.upper() == 'A')
 
 if is_step_a:
-    # === Step-A (引け後処理) の実行 ===
     print("仕事A：Finvizからデータを取得します...")
     try:
-        url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change"
-        html_content = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
-        all_tables = pd.read_html(StringIO(html_content))
-        df = all_tables[-2]
+        # ★★★ URLに表示列を指定するパラメータ(&c=...)を追加 ★★★
+        url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change&c=0,1,2,3,4,5,6,7,8,9,10,11"
+        html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
+        df = pd.read_html(StringIO(html))[-2]
         
-        df.columns = ['No.', 'Ticker', 'Company', 'Sector', 'Industry', 'Country', 'Market Cap', 'P/E', 'Price', 'Change', 'Volume']
-        df = df.iloc[1:].reset_index(drop=True)
+        df.columns = df.iloc[0]
+        df = df.drop(0).reset_index(drop=True)
         
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
         df.to_csv(file_path, index=False)
         print(f"'{file_name}' を正しいヘッダー付きでローカルに保存しました。")
-        
     except Exception as e:
         print(f"仕事Aでエラーが発生しました: {e}")
 else:
-    # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
         watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
@@ -63,27 +60,24 @@ else:
         
         df = pd.read_csv(latest_file)
         
+        # ★★★ 判定ロジックをより堅牢なものに修正 ★★★
+        has_float_column = 'Float' in df.columns
+        
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
-        if 'Float' in df.columns:
+        if has_float_column:
             df['Float'] = df['Float'].str.replace('M','', regex=False)
             df['Float'] = pd.to_numeric(df['Float'], errors='coerce')
             df = df.dropna(subset=['Price', 'Float'])
+            df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
         else:
-            print("警告: 'Float'列が見つかりません。Floatでの絞り込みはスキップされます。")
+            print("警告: 'Float'列が見つかりません。Priceでのみ絞り込みます。")
             df = df.dropna(subset=['Price'])
-
-        # ★★★ここが最新のロジックです★★★
-        df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}")
-
-        if 'Float' in df_watch.columns:
-            df_watch = df_watch.query(f"Float <= {FLOAT_MAX_M}")
-        
-        df_watch = df_watch.nlargest(10, 'Price')
+            df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}").nlargest(10, 'Price')
         
         if not df_watch.empty:
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
             
-            if 'Float' in df_watch.columns:
+            if has_float_column:
                 table = "\n".join(f"{t:<6}  ${p:<5.2f} Float:{f:.1f}M"
                                   for t, p, f in zip(df_watch.Ticker, df_watch.Price, df_watch.Float))
             else:
@@ -99,7 +93,7 @@ else:
                 try:
                     data = yf.download(t, period="1d", interval="1m", progress=False)
                     if data.empty: 
-                        print(f"銘柄 {t} の当日データが取得できませんでした。スキップします。")
+                        print(f"銘柄 {t} の当日データが取得できませんでした。")
                         continue
                     o, h, l = data.iloc[0]['Open'], data['High'].max(), data['Low'].min()
                     
