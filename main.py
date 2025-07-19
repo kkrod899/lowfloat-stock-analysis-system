@@ -5,7 +5,7 @@ import requests
 import yfinance as yf
 import json
 from io import StringIO
-import glob # ファイル検索のために追加
+import glob
 
 # ===================================================================
 # 0) 定数
@@ -52,7 +52,6 @@ else:
     # === Step-B (翌朝処理) の実行 ===
     print("仕事B：Discord通知と仮想取引を開始します...")
     try:
-        # ★★★ここからが修正部分★★★
         # outputフォルダ内のprev100_で始まるファイルを全てリストアップ
         watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
         
@@ -66,6 +65,9 @@ else:
         
         # 最新のファイルを読み込む
         df = pd.read_csv(latest_file)
+        
+        # ★★★ここがデバッグ用の追加部分★★★
+        print(f"読み込んだCSVの列名: {df.columns.tolist()}")
         # ★★★ここまで★★★
 
         # 数値に変換できないデータをエラーとして処理し、エラーが出た行を削除
