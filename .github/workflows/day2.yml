@@ -25,13 +25,11 @@ jobs:
       
       # 仕事Bの場合だけ、最新の仕事AのArtifactsをダウンロードする
       - name: Download Watchlist Artifact (for Step B)
-        if: ${{ github.event.inputs.step_to_run == 'B' || (github.event_name == 'schedule' && github.run_attempt == '1' && github.run_number > 0 && !contains(github.job, 'A')) }} # A rough way for schedule
-        uses: dawidd6/action-download-artifact@v3
+        if: ${{ github.event.inputs.step_to_run == 'B' || github.event_name == 'schedule' }}
+        uses: actions/download-artifact@v4 # ★ 公式アクションの最新版v4を使う
         with:
-          name: watchlist-artifact
+          name: analysis-artifacts
           path: output
-          workflow: ${{ github.workflow }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install and Run
         run: |
@@ -43,6 +41,7 @@ jobs:
 
       # 仕事Aの場合だけ、ファイルをArtifactsとしてアップロードする
       - name: Upload Watchlist & Results Artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }} # 常にアップロードする
         uses: actions/upload-artifact@v4
         with:
           name: analysis-artifacts
