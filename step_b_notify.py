@@ -11,8 +11,8 @@ import time
 # ===================================================================
 # 0) 定数
 # ===================================================================
-PRICE_MIN, PRICE_MAX = 0.5, 5
-FLOAT_MAX_M           = 10
+PRICE_MIN, PRICE_MAX = 0.1, 5
+FLOAT_MAX_M           = 50
 TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
 API_KEY               = os.getenv("ALPHA_VANTAGE_API_KEY") # Alpha Vantage用
