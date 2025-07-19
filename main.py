@@ -6,7 +6,7 @@ import yfinance as yf
 import json
 from io import StringIO
 import glob
-from bs4 import BeautifulSoup # ★★★ BeautifulSoupをインポート ★★★
+from bs4 import BeautifulSoup
 
 # ===================================================================
 # 0) 定数
@@ -27,7 +27,6 @@ is_step_a = (manual_step.upper() == 'A') if manual_step else (dt.time(20, 0) <= 
 if is_step_a:
     print("仕事A：Finvizからデータを取得します...")
     try:
-        # ★★★ BeautifulSoupを使った、確実なデータ取得 ★★★
         url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change"
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
         soup = BeautifulSoup(html, 'html.parser')
@@ -41,7 +40,6 @@ if is_step_a:
                 rows.append(cols)
         
         df = pd.DataFrame(rows, columns=headers)
-        # ★★★ ここまでがBeautifulSoupによる処理 ★★★
 
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
@@ -65,8 +63,9 @@ else:
         
         df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].copy()
 
-        # ★★★ .tolist()を使った、安全な判定ロジック ★★★
-        has_float_column = 'Float' in df.columns.tolist()
+        # --- ★★★ これが、唯一の正しい書き方です ★★★ ---
+        # 列名を「リスト」に変換してから、'Float'があるかチェックする
+        has_float_column = 'Float' in df_watch.columns.tolist()
         
         if has_float_column:
             print("'Float'列で絞り込みます。")
@@ -76,6 +75,7 @@ else:
             df_watch = df_watch[df_watch['Float'] <= FLOAT_MAX_M]
         else:
             print("警告: 'Float'列が見つかりません。")
+        # --- ★★★ ここまで ★★★ ---
         
         df_watch = df_watch.nlargest(10, 'Price')
         
