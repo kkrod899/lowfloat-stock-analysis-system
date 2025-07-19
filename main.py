@@ -6,16 +6,17 @@ import yfinance as yf
 import json
 from io import StringIO
 import glob
-from bs4 import BeautifulSoup # 新しいライブラリ
+from bs4 import BeautifulSoup
 
 # ===================================================================
 # 0) 定数
 # ===================================================================
 PRICE_MIN, PRICE_MAX = 0.5, 5
+FLOAT_MAX_M           = 10
+TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
 OUTPUT_DIR            = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-TP_PCT, SL_PCT        = 0.10, 0.05
 
 # ===================================================================
 # 1) Step 判定 & 実行
@@ -30,13 +31,10 @@ if is_step_a:
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
         soup = BeautifulSoup(html, 'html.parser')
         
-        # HTMLから直接テーブルデータを抽出する
         table = soup.find('table', {'class': 'screener_table'})
-        rows = []
-        # ヘッダー行を抽出
         headers = [header.text.strip() for header in table.find_all('th')]
-        
-        for row in table.find_all('tr')[1:]: # ヘッダー行を除いてループ
+        rows = []
+        for row in table.find_all('tr')[1:]:
             cols = [col.text.strip() for col in row.find_all('td')]
             if len(cols) == len(headers):
                 rows.append(cols)
@@ -59,18 +57,41 @@ else:
         latest_file = max(watchlist_files, key=os.path.getctime)
         print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
         df = pd.read_csv(latest_file)
-
-        # これ以降のコードは、ヘッダーが正しく設定されていれば動くはず
+        
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
         df.dropna(subset=['Price'], inplace=True)
-        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].nlargest(10, 'Price')
+        
+        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].copy()
+
+        # --- ★★★これが最後の修正です★★★ ---
+        try:
+            # まず、Floatでの絞り込みを試みる
+            df_watch['Float'] = df_watch['Float'].astype(str).str.replace('M','', regex=False)
+            df_watch['Float'] = pd.to_numeric(df_watch['Float'], errors='coerce')
+            df_watch.dropna(subset=['Float'], inplace=True)
+            df_watch = df_watch[df_watch['Float'] <= FLOAT_MAX_M]
+            print("'Float'列で絞り込みました。")
+            has_float_column = True
+        except KeyError:
+            # もしFloat列がなければ、KeyErrorが発生するので、ここで捕まえる
+            print("警告: 'Float'列が見つかりません。Priceでのみ絞り込みます。")
+            has_float_column = False
+        # --- ★★★ここまで★★★ ---
+        
+        df_watch = df_watch.nlargest(10, 'Price')
         
         if not df_watch.empty:
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
-            table_rows = [f"{row['Ticker']:<6}  ${row['Price']:<5.2f}" for index, row in df_watch.iterrows()]
+            table_rows = []
+            for index, row in df_watch.iterrows():
+                if has_float_column:
+                    table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f} Float:{row['Float']:.1f}M")
+                else:
+                    table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f}")
+            
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + "\n".join(table_rows) + "```"})
             
-            # シミュレーション部分 (変更なし)
+            # (シミュレーション部分は変更なし)
             rows = []
             result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
             for t in df_watch['Ticker']:
