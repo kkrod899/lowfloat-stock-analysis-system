@@ -59,21 +59,40 @@ try:
         
         print("シミュレーションを開始します...")
         for t in df_watch['Ticker']:
+            # --- ★★★ ここからが、最後の、そして唯一正しい修正です ★★★ ---
             try:
+                # データをダウンロード
                 data = yf.download(t, period="1d", interval="1m", progress=False, auto_adjust=True, back_adjust=True)
+
+                # 取得したデータが、本当に有効なDataFrame（表）か、厳密にチェックする
                 if not isinstance(data, pd.DataFrame) or data.empty:
-                    print(f"銘柄 {t} のデータ取得に失敗。スキップします。")
+                    print(f"銘柄 {t} のデータ取得に失敗、またはデータが空です。スキップします。")
+                    # 次の銘柄の処理に移る
                     continue
 
-                o, h, l = data['Open'].iloc[0], data['High'].max(), data['Low'].min()
+                # データを安全に変数に格納
+                o = data['Open'].iloc[0]
+                h = data['High'].max()
+                l = data['Low'].min()
+                
+                # 以降の計算処理
                 max_gain_pct = ((h - o) / o) * 100 if o > 0 else 0
                 max_loss_pct = ((l - o) / o) * 100 if o > 0 else 0
                 tp_hit = h >= o * (1 + TP_PCT)
                 sl_hit = l <= o * (1 - SL_PCT)
                 pnl = 10 if tp_hit else (-5 if sl_hit else 0)
-                rows.append([dt.date.today().isoformat(),t,o,h,l,pnl,round(max_gain_pct, 2),round(max_loss_pct, 2)])
+                
+                rows.append([
+                    dt.date.today().isoformat(), t, o, h, l, pnl, 
+                    round(max_gain_pct, 2), round(max_loss_pct, 2)
+                ])
+            
             except Exception as e:
-                print(f"銘柄 {t} の処理中にエラー: {e}")
+                # yfinance内部の予期せぬエラー（ambiguousエラーなど）を、すべてここでキャッチする
+                print(f"銘柄 {t} の処理中に予期せぬエラーが発生したため、スキップします。エラー: {e}")
+                # エラーが起きてもループを止めず、次の銘柄の処理に移る
+                continue
+            # --- ★★★ ここまでが、最後の修正です ★★★ ---
         
         if rows:
             df_results = pd.DataFrame(rows, columns=result_columns)
