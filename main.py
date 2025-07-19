@@ -11,7 +11,8 @@ import glob
 # 0) 定数
 # ===================================================================
 PRICE_MIN, PRICE_MAX = 0.5, 5
-FLOAT_MAX_M           = 10
+# Floatでの絞り込みは行わないため、FLOAT_MAX_Mはコメントアウト
+# FLOAT_MAX_M           = 10 
 TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
 OUTPUT_DIR            = "output"
@@ -36,13 +37,14 @@ if is_step_a:
         html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
         df = pd.read_html(StringIO(html))[-2]
         
-        df.columns = df.iloc[0] # 1行目をヘッダーにする
+        # ★★★【最重要】1行目をヘッダーとして設定し、その行をデータから削除する★★★
+        df.columns = df.iloc[0]
         df = df.drop(0).reset_index(drop=True)
         
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
         df.to_csv(file_path, index=False)
-        print(f"'{file_name}' をローカルに保存しました。")
+        print(f"'{file_name}' をヘッダー付きでローカルに保存しました。")
     except Exception as e:
         print(f"仕事Aでエラーが発生しました: {e}")
 else:
@@ -56,39 +58,19 @@ else:
         print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
         df = pd.read_csv(latest_file)
         
-        # --- ★★★ここからが最終FIXロジック★★★ ---
-        # Price列のデータ型を数値に変換。変換できないものはNaNになり、後で削除される
+        # Price列のデータ型を数値に変換。変換できないものは削除
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
-        df.dropna(subset=['Price'], inplace=True) # Priceが数値でない行は削除
+        df.dropna(subset=['Price'], inplace=True)
 
-        # まずはPriceで絞り込む
-        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].copy()
-
-        # Float列が存在するかどうかを安全にチェック
-        if 'Float' in df_watch.columns:
-            print("'Float'列が見つかりました。Floatでさらに絞り込みます。")
-            df_watch['Float'] = df_watch['Float'].astype(str).str.replace('M','', regex=False)
-            df_watch['Float'] = pd.to_numeric(df_watch['Float'], errors='coerce')
-            df_watch.dropna(subset=['Float'], inplace=True)
-            # Floatの条件でさらに絞り込む
-            df_watch = df_watch[df_watch['Float'] <= FLOAT_MAX_M]
-        else:
-            print("警告: 'Float'列が見つかりません。Priceでのみ絞り込みます。")
-        
-        # 最後に、株価の高い順に上位10件を取得
+        # ★★★Priceでのみ絞り込む、シンプルなロジック★★★
+        df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)]
         df_watch = df_watch.nlargest(10, 'Price')
-        # --- ★★★ここまで★★★ ---
-
+        
         if not df_watch.empty:
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
-            table_rows = []
-            has_float_column = 'Float' in df_watch.columns
-            for index, row in df_watch.iterrows():
-                if has_float_column:
-                    table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f} Float:{row['Float']:.1f}M")
-                else:
-                    table_rows.append(f"{row['Ticker']:<6}  ${row['Price']:<5.2f}")
             
+            # Float列がないため、シンプルな通知に変更
+            table_rows = [f"{row['Ticker']:<6}  ${row['Price']:<5.2f}" for index, row in df_watch.iterrows()]
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + "\n".join(table_rows) + "```"})
 
             # (これ以降のシミュレーション部分は変更なし)
