@@ -1,5 +1,6 @@
 pandas==2.2.2
 requests
-yfinance
+yfinance # (Finviz取得との比較のため、念のため残す)
 lxml
 beautifulsoup4
+investpy
