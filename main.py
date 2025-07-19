@@ -38,11 +38,9 @@ if is_step_a:
         all_tables = pd.read_html(StringIO(html_content))
         df = all_tables[-2]
         
-        # ★★★ここが最終修正部分★★★
-        # 正しいヘッダーを直接設定し、ヘッダー行だった0行目を削除する
+        # 正しいヘッダーを直接設定し、ヘッダー行だった0行目を削除
         df.columns = ['No.', 'Ticker', 'Company', 'Sector', 'Industry', 'Country', 'Market Cap', 'P/E', 'Price', 'Change', 'Volume']
         df = df.iloc[1:].reset_index(drop=True)
-        # ★★★ここまで★★★
         
         file_name = f"prev100_{dt.date.today().isoformat()}.csv"
         file_path = os.path.join(OUTPUT_DIR, file_name)
@@ -67,34 +65,33 @@ else:
         
         df = pd.read_csv(latest_file)
         
-        # 実際の列名を確認するためのデバッグコード（念のため残しておきます）
-        # print(f"読み込んだCSVの列名: {df.columns.tolist()}")
-
         # 数値データの前処理
         df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
-        # Float列が存在するか確認してから処理
         if 'Float' in df.columns:
             df['Float'] = df['Float'].str.replace('M','', regex=False)
             df['Float'] = pd.to_numeric(df['Float'], errors='coerce')
             df = df.dropna(subset=['Price', 'Float'])
         else:
-            # Finvizの仕様変更でFloat列が取得できない場合も考慮
             print("警告: 'Float'列が見つかりません。Floatでの絞り込みはスキップされます。")
             df = df.dropna(subset=['Price'])
 
-
+        # ★★★ここからが最終修正部分★★★
         # 条件で銘柄を絞り込み
-        if 'Float' in df.columns:
-             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX} and Float <= {FLOAT_MAX_M}").nlargest(10, 'Price')
-        else:
-             df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}").nlargest(10, 'Price')
+        # まずはPriceで絞り込む
+        df_watch = df.query(f"{PRICE_MIN} <= Price <= {PRICE_MAX}")
 
+        # Float列が存在する場合だけ、さらにFloatで絞り込む
+        if 'Float' in df_watch.columns:
+            df_watch = df_watch.query(f"Float <= {FLOAT_MAX_M}")
+        
+        # 最後に上位10件を取得
+        df_watch = df_watch.nlargest(10, 'Price')
+        # ★★★ここまで★★★
         
         if not df_watch.empty:
             # Discordに通知
             print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
             
-            # Float列がない場合でもエラーにならないように配慮
             if 'Float' in df_watch.columns:
                 table = "\n".join(f"{t:<6}  ${p:<5.2f} Float:{f:.1f}M"
                                   for t, p, f in zip(df_watch.Ticker, df_watch.Price, df_watch.Float))
