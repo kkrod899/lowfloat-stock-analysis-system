@@ -12,7 +12,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 print("仕事A：Finvizからデータを取得します...")
 try:
     # FinvizのURL
-    url = "https://finviz.com/screener.ashx?v=111&f=ta_perf_d100o&o=-change"
+    url = "https://finviz.com/screener.ashx?v=152&o=-change&c=0,1,2,3,4,5,6,7,25,67,65,66"
     
     # BeautifulSoupを使って、HTMLからテーブルを正確に抽出
     html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
