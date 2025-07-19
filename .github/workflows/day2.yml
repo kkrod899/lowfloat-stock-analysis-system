@@ -1,9 +1,12 @@
-name: Day-2 LowFloat
+name: Day-2 LowFloat Stock Analyzer
 
 on:
   schedule:
+    # 日本時間 AM 05:05 (UTC 20:05) に仕事Aを実行
     - cron: '5 20 * * 1-5'
+    # 日本時間 AM 06:05 (UTC 21:05) に仕事Bを実行
     - cron: '5 21 * * 1-5'
+  
   workflow_dispatch:
     inputs:
       step_to_run:
@@ -16,38 +19,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
-      # ★★★ここからが追加部分★★★
-      # 仕事Bの場合だけ、仕事Aが作ったファイルをダウンロードする
-      - name: Download previous watchlist if Step B
-        # 手動実行でBが選ばれたか、スケジュール実行でBの時間帯だったら、このステップを実行
-        if: github.event.inputs.step_to_run == 'B' || (github.event_name == 'schedule' && github.run_attempt == '1' && github.run_number > 1)
+      
+      # 仕事Bの場合だけ、最新の仕事AのArtifactsをダウンロードする
+      - name: Download Watchlist Artifact (for Step B)
+        if: ${{ github.event.inputs.step_to_run == 'B' || (github.event_name == 'schedule' && github.run_attempt == '1' && github.run_number > 0 && !contains(github.job, 'A')) }} # A rough way for schedule
         uses: dawidd6/action-download-artifact@v3
         with:
-          # 最新の実行から "watchlist-csv" をダウンロード
-          name: watchlist-csv
+          name: watchlist-artifact
           path: output
+          workflow: ${{ github.workflow }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-      # ★★★ここまで★★★
-          
-      - name: Install dependencies and Run script
+
+      - name: Install and Run
         run: |
           pip install -r requirements.txt
           python main.py
         env:
-          DISCORD_HOOK:  ${{ secrets.DISCORD_HOOK }}
+          DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
           MANUAL_STEP: ${{ github.event.inputs.step_to_run }}
-          
-      # ★★★ここからが追加部分★★★
-      # 仕事Aの場合だけ、作ったファイルをアップロードする
-      - name: Upload watchlist if Step A
-        if: github.event.inputs.step_to_run == 'A' || (github.event_name == 'schedule' && contains(github.run_id, 'A')) # A rough way to distinguish
+
+      # 仕事Aの場合だけ、ファイルをArtifactsとしてアップロードする
+      - name: Upload Watchlist & Results Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: watchlist-csv
-          path: output/prev100_*.csv
-      # ★★★ここまで★★★
+          name: analysis-artifacts
+          path: output/
