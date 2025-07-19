@@ -22,7 +22,12 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # 1) Step 判定 & 実行
 # ===================================================================
 manual_step = os.getenv("MANUAL_STEP")
-is_step_a = (manual_step.upper() == 'A') if manual_step else (dt.time(20, 0) <= dt.datetime.utcnow().time() < dt.time(21, 0))
+is_step_a = False
+if not manual_step:
+    UTC_NOW = dt.datetime.utcnow()
+    is_step_a = dt.time(20, 0) <= UTC_NOW.time() < dt.time(21, 0)
+else:
+    is_step_a = (manual_step.upper() == 'A')
 
 if is_step_a:
     print("仕事A：Finvizからデータを取得します...")
@@ -63,19 +68,14 @@ else:
         
         df_watch = df[df['Price'].between(PRICE_MIN, PRICE_MAX)].copy()
 
-        # --- ★★★ これが、唯一の正しい書き方です ★★★ ---
-        # 列名を「リスト」に変換してから、'Float'があるかチェックする
         has_float_column = 'Float' in df_watch.columns.tolist()
         
         if has_float_column:
-            print("'Float'列で絞り込みます。")
-            df_watch['Float'] = df_watch['Float'].astype(str).str.replace('M','', regex=False)
-            df_watch['Float'] = pd.to_numeric(df_watch['Float'], errors='coerce')
+            df_watch['Float'] = pd.to_numeric(df_watch['Float'].astype(str).str.replace('M','', regex=False), errors='coerce')
             df_watch.dropna(subset=['Float'], inplace=True)
             df_watch = df_watch[df_watch['Float'] <= FLOAT_MAX_M]
         else:
             print("警告: 'Float'列が見つかりません。")
-        # --- ★★★ ここまで ★★★ ---
         
         df_watch = df_watch.nlargest(10, 'Price')
         
@@ -90,22 +90,37 @@ else:
             
             requests.post(HOOK, json={"username": "Day-2 Watch", "content": "```" + "\n".join(table_rows) + "```"})
             
-            # (シミュレーション部分は変更なし)
             rows = []
             result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
+            
+            print("シミュレーションを開始します...")
             for t in df_watch['Ticker']:
                 try:
-                    data = yf.download(t, period="1d", interval="1m", progress=False)
-                    if data.empty: continue
-                    o, h, l = data.iloc[0]['Open'], data['High'].max(), data['Low'].min()
+                    data = yf.download(t, period="1d", interval="1m", progress=False, auto_adjust=True, back_adjust=True)
+
+                    # --- ★★★ これが、最後の、そして唯一正しい修正です ★★★ ---
+                    if not isinstance(data, pd.DataFrame) or data.empty:
+                        print(f"銘柄 {t} のデータ取得に失敗、またはデータが空です。スキップします。")
+                        continue
+                    # --- ★★★ ここまで ★★★
+
+                    o = data['Open'].iloc[0]
+                    h = data['High'].max()
+                    l = data['Low'].min()
+                    
                     max_gain_pct = ((h - o) / o) * 100 if o > 0 else 0
                     max_loss_pct = ((l - o) / o) * 100 if o > 0 else 0
                     tp_hit = h >= o * (1 + TP_PCT)
                     sl_hit = l <= o * (1 - SL_PCT)
                     pnl = 10 if tp_hit else (-5 if sl_hit else 0)
-                    rows.append([dt.date.today().isoformat(),t,o,h,l,pnl,round(max_gain_pct, 2),round(max_loss_pct, 2)])
+                    
+                    rows.append([
+                        dt.date.today().isoformat(), t, o, h, l, pnl, 
+                        round(max_gain_pct, 2), round(max_loss_pct, 2)
+                    ])
                 except Exception as e:
-                    print(f"銘柄 {t} の処理中にエラー: {e}")
+                    print(f"銘柄 {t} の処理中に予期せぬエラーが発生しました: {e}")
+            
             if rows:
                 df_results = pd.DataFrame(rows, columns=result_columns)
                 results_path = os.path.join(OUTPUT_DIR, "results.csv")
