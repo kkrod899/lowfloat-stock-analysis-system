@@ -3,9 +3,10 @@ import os
 import datetime as dt
 import pandas as pd
 import requests
-import yfinance as yf
+import yfinance as yf # yfinanceはもう使いませんが、念のため残しておきます
 import json
 import glob
+import investpy # ★★★ 新しいデータソースライブラリ ★★★
 
 # ===================================================================
 # 0) 定数
@@ -22,7 +23,7 @@ try:
     watchlist_files = glob.glob(os.path.join(OUTPUT_DIR, "prev100_*.csv"))
     if not watchlist_files:
         print("処理対象のウォッチリストファイルが見つかりません。仕事Aが成功したか確認してください。")
-        exit() # 正常終了
+        exit()
     
     latest_file = max(watchlist_files, key=os.path.getctime)
     print(f"最新のウォッチリスト '{os.path.basename(latest_file)}' を読み込みます。")
@@ -59,23 +60,28 @@ try:
         
         print("シミュレーションを開始します...")
         for t in df_watch['Ticker']:
-            # --- ★★★ ここからが、最後の、そして唯一正しい修正です ★★★ ---
             try:
-                # データをダウンロード
-                data = yf.download(t, period="1d", interval="1m", progress=False, auto_adjust=True, back_adjust=True)
-
-                # 取得したデータが、本当に有効なDataFrame（表）か、厳密にチェックする
+                # --- ★★★ データソースを yfinance から investpy に変更 ★★★ ---
+                # investpyは、直近の日付の1分足データを取得します
+                # from_dateとto_dateに今日の日付を 'dd/mm/yyyy' 形式で指定します
+                today_str = dt.date.today().strftime('%d/%m/%Y')
+                data = investpy.get_stock_historical_data(stock=t,
+                                                          country='United States',
+                                                          from_date=today_str,
+                                                          to_date=today_str,
+                                                          interval='1 Minute')
+                
                 if not isinstance(data, pd.DataFrame) or data.empty:
-                    print(f"銘柄 {t} のデータ取得に失敗、またはデータが空です。スキップします。")
-                    # 次の銘柄の処理に移る
+                    print(f"銘柄 {t} のデータ取得に失敗(investpy)。スキップします。")
                     continue
+                # --- ★★★ ここまでが変更点 ★★★ ---
 
-                # データを安全に変数に格納
+                # investpyが返す列名は 'Open', 'High', 'Low' なので、そのまま使えます
                 o = data['Open'].iloc[0]
                 h = data['High'].max()
                 l = data['Low'].min()
                 
-                # 以降の計算処理
+                # (以降の計算は変更なし)
                 max_gain_pct = ((h - o) / o) * 100 if o > 0 else 0
                 max_loss_pct = ((l - o) / o) * 100 if o > 0 else 0
                 tp_hit = h >= o * (1 + TP_PCT)
@@ -86,13 +92,10 @@ try:
                     dt.date.today().isoformat(), t, o, h, l, pnl, 
                     round(max_gain_pct, 2), round(max_loss_pct, 2)
                 ])
-            
             except Exception as e:
-                # yfinance内部の予期せぬエラー（ambiguousエラーなど）を、すべてここでキャッチする
-                print(f"銘柄 {t} の処理中に予期せぬエラーが発生したため、スキップします。エラー: {e}")
-                # エラーが起きてもループを止めず、次の銘柄の処理に移る
+                # investpy内部のエラーも含め、すべてここでキャッチします
+                print(f"銘柄 {t} の処理中にエラーが発生したため、スキップします。エラー: {e}")
                 continue
-            # --- ★★★ ここまでが、最後の修正です ★★★ ---
         
         if rows:
             df_results = pd.DataFrame(rows, columns=result_columns)
