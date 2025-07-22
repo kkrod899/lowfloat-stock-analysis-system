@@ -1,19 +1,15 @@
 name: Stock Analysis Workflow
-
 on:
   schedule:
-    # 日本時間 AM 06:05 (UTC 21:05) に、両方のジョブをほぼ同時に開始
-    - cron: '5 21 * * 1-5'
+    - cron: '5 20 * * 1-5'
   workflow_dispatch:
-
 jobs:
-  # === Job 1: 今日の通知と、次回のシミュレーションのためのデータ保存 ===
-  notify_job:
+  fetch:
     name: Step A - Fetch and Notify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-python@v5
+      - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - name: Install and Run
         run: |
@@ -23,21 +19,21 @@ jobs:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
       - uses: actions/upload-artifact@v4
         with:
-          name: watchlist-artifacts # 監視リストだけを保存
-          path: output/watchlist_*.csv
+          name: analysis-artifacts
+          path: output/
 
-  # === Job 2: 前営業日の答え合わせ（シミュレーション） ===
-  simulate_job:
-    name: Step B - Simulate Previous Day
+  simulate:
+    name: Step B - Simulate
     runs-on: ubuntu-latest
+    needs: fetch
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: output # 過去の全てのArtifactsをダウンロード
+          name: analysis-artifacts
+          path: output
       - name: Install and Run
         run: |
           pip install -r requirements.txt
@@ -46,5 +42,5 @@ jobs:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
       - uses: actions/upload-artifact@v4
         with:
-          name: result-artifacts # 結果だけを保存
-          path: output/results.csv
+          name: analysis-artifacts
+          path: output/
