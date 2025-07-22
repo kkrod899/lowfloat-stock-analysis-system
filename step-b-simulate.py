@@ -1,34 +1,21 @@
-import os
-import datetime as dt
-import pandas as pd
-import requests
-import json
-import glob
-import time
-import pytz
+import os, datetime as dt, pandas as pd, requests, json, glob, time, pytz
 import pandas_market_calendars as mcal
 
-# ===================================================================
-# 0) 定数
-# ===================================================================
-TP_PCT, SL_PCT        = 0.10, 0.05
-API_KEY               = os.getenv("ALPHA_VANTAGE_API_KEY")
-OUTPUT_DIR            = "output"
+# 定数
+TP_PCT, SL_PCT = 0.10, 0.05
+API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+OUTPUT_DIR = "output"
 
 print("仕事B：シミュレーションを開始します...")
 try:
-    # --- 準備：検証すべき「前営業日」のファイルを探す ---
     nyse = mcal.get_calendar('NYSE')
-    # 「今日」の米国日付を取得
     et_timezone = pytz.timezone('America/New_York')
     today_et = dt.datetime.now(et_timezone).date()
 
-    # 「今日」の直近の営業日（＝シミュレーション対象日）を取得
     schedule = nyse.schedule(start_date=today_et, end_date=today_et)
     if schedule.empty:
-        print(f"本日({today_et})は市場休場日のため、シミュレーションはありません。"); exit()
+        print(f"本日({today_et})は市場休場日のためシミュレーションはありません。"); exit()
     
-    # 監視リストが作られた「前営業日」の日付を取得
     recent_trading_days = nyse.schedule(start_date=today_et - dt.timedelta(days=7), end_date=today_et)
     if len(recent_trading_days) < 2:
         print("前営業日のデータが見つかりません。"); exit()
@@ -43,11 +30,8 @@ try:
     print(f"'{os.path.basename(file_path)}' の銘柄を、本日({today_et})の市場で検証します。")
     df_watch = pd.read_csv(file_path)
     
-    # --- シミュレーション ---
     if not df_watch.empty:
-        rows = []
-        result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
-        
+        rows, result_columns = [], ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
         for t in df_watch['Ticker']:
             try:
                 url = f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={t}&interval=1min&apikey={API_KEY}&outputsize=full'
@@ -83,7 +67,6 @@ try:
             print(f"results.csv に {len(rows)}件保存。")
     else:
         print("監視対象銘柄なし。")
-
     print("仕事B 完了。")
 except Exception as e:
     print(f"仕事Bでエラーが発生: {e}"); exit(1)
