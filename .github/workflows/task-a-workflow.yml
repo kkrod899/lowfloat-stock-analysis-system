@@ -1,0 +1,32 @@
+# .github/workflows/task-a-workflow.yml
+
+name: Step A - Fetch and Notify
+
+on:
+  schedule:
+    - cron: '5 20 * * 1-5' # 毎週月～金曜の 20:05 (UTC)
+  workflow_dispatch:
+
+jobs:
+  fetch_and_notify:
+    name: Fetch Hot Stocks and Notify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies and Run task_a
+        run: |
+          pip install -r requirements.txt
+          python task_a_notify.py
+        env:
+          DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
+          
+      - name: Upload Watchlist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchlist-artifact # この名前が重要
+          path: output/watchlist_*.csv
+          retention-days: 2 # 2日間だけ保存すれば十分
