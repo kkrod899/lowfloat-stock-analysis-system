@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # === Job 1: 仕事A (データを取得し、通知まで行う) ===
   fetch_and_notify:
     name: Step A - Fetch and Notify
     runs-on: ubuntu-latest
@@ -17,36 +16,47 @@ jobs:
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          # ★★★ 正しいファイル名: job_b.py ★★★
           python job_a.py
         env:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
       - uses: actions/upload-artifact@v4
         with:
-          name: analysis-artifacts
-          path: output/
+          # ★★★ watchlistだけを保存 ★★★
+          name: watchlist-artifact
+          path: output/watchlist_*.csv
 
-  # === Job 2: 仕事B (シミュレーション専門) ===
   simulate:
     name: Step B - Simulate
     runs-on: ubuntu-latest
-    needs: fetch_and_notify # Jobの名前を合わせる
+    needs: fetch_and_notify
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - uses: actions/download-artifact@v4
+      
+      # ★★★ watchlistと、過去のresultsの両方をダウンロード ★★★
+      - name: Download Watchlist
+        uses: actions/download-artifact@v4
         with:
-          name: analysis-artifacts
+          name: watchlist-artifact
           path: output
+      - name: Download Previous Results (if exists)
+        uses: actions/download-artifact@v4
+        with:
+          name: results-artifact
+          path: output
+        continue-on-error: true # resultsがまだなくてもエラーにしない
+
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          # ★★★ 正しいファイル名: job_b.py ★★★
           python job_b.py
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-      - uses: actions/upload-artifact@v4
+          
+      # ★★★ results.csvだけを保存 ★★★
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
         with:
-          name: analysis-artifacts
-          path: output/
+          name: results-artifact
+          path: output/results.csv
