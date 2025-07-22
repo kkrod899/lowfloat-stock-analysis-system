@@ -1,0 +1,48 @@
+# .github/workflows/task-b-workflow.yml
+
+name: Step B - Simulate and Collect Data
+
+on:
+  schedule:
+    - cron: '5 20 * * 1-5' # Step Aと全く同じスケジュールで実行
+  workflow_dispatch:
+
+jobs:
+  simulate:
+    name: Simulate and Collect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      # 前日のTask Aが作ったwatchlistをダウンロードする
+      - name: Download Watchlist from previous day's run
+        uses: actions/download-artifact@v4
+        with:
+          name: watchlist-artifact
+          path: output
+          
+      # 過去の全結果(results.csv)をダウンロードする
+      - name: Download All Previous Results (if exists)
+        uses: actions/download-artifact@v4
+        with:
+          name: results-artifact
+          path: output
+        continue-on-error: true # 初回実行など、まだなくてもエラーにしない
+
+      - name: Install dependencies and Run task_b
+        run: |
+          pip install -r requirements.txt
+          python task_b_simulate.py
+        env:
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          
+      # 今回の結果を含む、新しいresults.csvをアップロードする
+      - name: Upload Results Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-artifact # この名前で保存
+          path: output/results.csv
+          retention-days: 90 # 結果データは長めに保存
