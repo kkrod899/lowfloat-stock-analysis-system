@@ -43,7 +43,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           # ★★★ 正しいファイル名: job_b.py ★★★
-          python job_b.py.py
+          python job_b.py
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
       - uses: actions/upload-artifact@v4
