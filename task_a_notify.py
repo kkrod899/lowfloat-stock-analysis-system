@@ -41,35 +41,29 @@ def clean_numeric_value(value):
 print("仕事A：データ取得とDiscord通知を開始します...")
 try:
     # --- Finvizからデータを取得 ---
-    # 【修正】URLのカラム名を実際のHTMLヘッダー名に合わせる
-    # v=111 (デフォルトビュー) に戻し、必要なフィルターだけを指定する方が安定する
-    filters = [
-        'sh_price_u5',     # Price: Under $5
-        'sh_price_o0.1',   # Price: Over $0.1
-        'sh_float_u50',    # Float: Under 50M
-    ]
-    url = f"https://finviz.com/screener.ashx?v=152&f={','.join(filters)}&o=-change"
+    # 【修正】カラムを明示的に指定する元のURL形式に戻す。Volume(13)も追加。
+    url = "https://finviz.com/screener.ashx?v=152&o=-change&c=0,1,2,3,4,6,8,9,13,25,61,63,64,65,66"
     print(f"URLからデータを取得します: {url}")
 
     html = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}).text
     soup = BeautifulSoup(html, 'html.parser')
     
-    # 【全面改修】新しいHTML構造に対応したスクレイピングロジック
     table = soup.find('table', class_='screener_table')
     if not table:
         raise ValueError("Finvizのスクリーナーテーブルが見つかりませんでした。")
 
     # ヘッダーを取得
     headers = [th.get_text(strip=True) for th in table.find_all('th')]
-    # カラム名に 'Float' がない場合、'Shs Float' を 'Float' にリネーム
+    # 'Shs Float' を 'Float' にリネームするロジック
     if 'Float' not in headers and 'Shs Float' in headers:
         headers[headers.index('Shs Float')] = 'Float'
 
     # データ行を取得
     rows = []
-    for tr in table.find_all('tr')[1:]: # ヘッダー行をスキップ
-        # 'td'タグのリストを取得
-        cols = [td.get_text(strip=True) for td in tr.find_all('td')]
+    # aタグのテキストのみを取得するよう修正
+    for tr in table.find_all('tr')[1:]:
+        # 各セル内のaタグのテキストを取得。aタグがなければtdのテキストを取得。
+        cols = [td.find('a').get_text(strip=True) if td.find('a') else td.get_text(strip=True) for td in tr.find_all('td')]
         if len(cols) == len(headers):
             rows.append(cols)
 
@@ -87,16 +81,24 @@ try:
     for col in [c for c in numeric_cols if c in df.columns]:
         df[col] = df[col].apply(clean_numeric_value)
     
-    df.dropna(subset=['Price', 'Float'], inplace=True)
+    # --- 銘柄の絞り込み ---
+    required_cols = ['Price', 'Float']
+    if not all(col in df.columns for col in required_cols):
+        print("取得したカラム:", df.columns.tolist())
+        raise KeyError(f"必須カラム {required_cols} のいずれかが見つかりません。")
 
-    # --- 銘柄の絞り込み (URLで実施済みだが念のため) ---
+    df.dropna(subset=required_cols, inplace=True)
+
     df_watch = df[
         (df['Price'].between(PRICE_MIN, PRICE_MAX)) &
         (df['Float'] <= FLOAT_MAX_M * 1e6)
     ].copy()
     
-    # 上位N件を取得
-    df_watch = df_watch.head(TOP_N_RESULTS)
+    # Changeの降順でソートし、上位N件を取得
+    if 'Change' in df_watch.columns:
+        df_watch = df_watch.sort_values(by='Change', ascending=False).head(TOP_N_RESULTS)
+    else:
+        df_watch = df_watch.head(TOP_N_RESULTS)
 
     # --- Discord通知 & ファイル保存 ---
     if not df_watch.empty:
@@ -110,10 +112,14 @@ try:
         message_header = f"--- {market_date.strftime('%Y-%m-%d')} 市場後 / 本日の監視銘柄 ---"
         
         table_rows = []
+        # 'Rel Volume'をリネームマップに合わせて修正
+        rename_map = {'Rel Volume': 'RelVolume'}
+        df_watch.rename(columns=rename_map, inplace=True)
+        
         for _, row in df_watch.iterrows():
             change_str = f"{row.get('Change', 0):.2f}%"
             float_str = f"{row.get('Float', 0)/1e6:.1f}M"
-            rel_vol_str = f"{row.get('Rel Volume', 0):.2f}"
+            rel_vol_str = f"{row.get('RelVolume', 0):.2f}"
             
             table_rows.append(
                 f"{row['Ticker']:<7} ${row['Price']:<5.2f} Chg:{change_str:<8} Float:{float_str:<8} RVol:{rel_vol_str}"
