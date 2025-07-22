@@ -2,11 +2,10 @@ import os
 import datetime as dt
 import pandas as pd
 import requests
-import yfinance as yf
 import json
 import glob
-import investpy
 import time
+import pytz # ★★★ タイムゾーンライブラリをインポート ★★★
 
 # ===================================================================
 # 0) 定数
@@ -15,7 +14,7 @@ PRICE_MIN, PRICE_MAX = 0.1, 5
 FLOAT_MAX_M           = 50
 TP_PCT, SL_PCT        = 0.10, 0.05
 HOOK                  = os.getenv("DISCORD_HOOK")
-API_KEY               = os.getenv("ALPHA_VANTAGE_API_KEY") # Alpha Vantage用
+API_KEY               = os.getenv("ALPHA_VANTAGE_API_KEY")
 OUTPUT_DIR            = "output"
 
 print("仕事B：Discord通知と仮想取引を開始します...")
@@ -31,6 +30,10 @@ try:
     df = pd.read_csv(latest_file)
     
     # --- 銘柄の絞り込み ---
+    # Finvizの列名'Shs Float'を、コード内で使いやすい'Float'に統一
+    if 'Shs Float' in df.columns:
+        df.rename(columns={'Shs Float': 'Float'}, inplace=True)
+        
     df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
     df.dropna(subset=['Price'], inplace=True)
     
@@ -59,7 +62,7 @@ try:
         rows = []
         result_columns = ["date", "ticker", "open", "high", "low", "pnl", "max_gain_pct", "max_loss_pct"]
         
-        print("シミュレーションを開始します...")
+        print("シミュレーションを開始します (Data source: Alpha Vantage)...")
         for t in df_watch['Ticker']:
             try:
                 # Alpha Vantage APIで1分足データを取得
@@ -69,7 +72,6 @@ try:
 
                 if 'Time Series (1min)' not in data_json:
                     print(f"銘柄 {t} のデータ取得に失敗(Alpha Vantage)。エラー: {data_json.get('Note', 'Unknown error')}")
-                    # API制限を避けるため、少し待つ
                     time.sleep(15)
                     continue
 
@@ -77,10 +79,17 @@ try:
                 df_price.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
                 df_price = df_price.astype(float)
                 
-                # 日付でフィルタリング（米国東部時間基準）
-                today_et = (dt.datetime.utcnow() - dt.timedelta(hours=4)).date()
-                df_price.index = pd.to_datetime(df_price.index)
+                # --- ★★★ここからがタイムゾーン修正の核心部分★★★ ---
+                # タイムスタンプのインデックスをdatetime型に変換し、米国東部時間(ET)として解釈させる
+                df_price.index = pd.to_datetime(df_price.index).tz_localize('America/New_York')
+
+                # 現在の米国東部時間の日付を取得する
+                et_timezone = pytz.timezone('America/New_York')
+                today_et = dt.datetime.now(et_timezone).date()
+
+                # 正しいタイムゾーンで日付を比較し、当日データのみを抽出
                 df_today = df_price[df_price.index.date == today_et].sort_index()
+                # --- ★★★ここまで★★★ ---
 
                 if df_today.empty:
                     print(f"銘柄 {t} の当日データがありませんでした。")
@@ -96,7 +105,6 @@ try:
                 
                 rows.append([dt.date.today().isoformat(),t,o,h,l,pnl,round(max_gain_pct, 2),round(max_loss_pct, 2)])
 
-                # API制限（1分間に5回まで）を避けるため、15秒待機
                 print(f"銘柄 {t} 処理完了。15秒待機します...")
                 time.sleep(15)
 
