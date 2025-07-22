@@ -48,19 +48,28 @@ try:
 
     # --- Discord通知 & ファイル保存 ---
     if not df_watch.empty:
-        # NYSEのカレンダーを使い、「直近の営業日」を正確に特定する
+        print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
+        
+        # --- ★★★ここからが、正しい市場日を取得する最終FIXロ-ジック★★★ ---
+        # NYSEのカレンダーを取得
         nyse = mcal.get_calendar('NYSE')
+        
+        # GitHub Actionsの実行日（UTC）を取得
         today_utc = dt.date.today()
+        
+        # 実行日までの直近の取引日スケジュールを取得
         schedule = nyse.schedule(start_date=today_utc - dt.timedelta(days=7), end_date=today_utc)
         
         if schedule.empty:
-            print("直近の営業日が見つかりませんでした。")
-            market_date = today_utc - dt.timedelta(days=1) # 念のためのフォールバック
+            # もしスケジュールが空なら（非常に稀なケース）、とりあえず前日とする
+            print("警告: 直近の営業日が見つかりませんでした。前日の日付を使用します。")
+            market_date = today_utc - dt.timedelta(days=1)
         else:
+            # スケジュールの最後の日付が、私たちが対象としている「市場日」
             market_date = schedule.index[-1].date()
         
-        print(f"{len(df_watch)}件の銘柄をDiscordに通知します...")
         message_header = f"--- {market_date.strftime('%Y-%m-%d')} 市場後 / 本日の監視銘柄 ---"
+        # --- ★★★ここまで★★★ ---
         
         table_rows = []
         for index, row in df_watch.iterrows():
