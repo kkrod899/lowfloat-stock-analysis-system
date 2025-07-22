@@ -16,7 +16,7 @@ jobs:
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          python job_a.py
+          python task_a_notify.py
         env:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
       - uses: actions/upload-artifact@v4
@@ -50,7 +50,7 @@ jobs:
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          python job_b.py
+          python task_b_simulate.py
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           
