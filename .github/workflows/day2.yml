@@ -17,8 +17,8 @@ jobs:
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          # ★★★ 正しいファイル名: step_a_notify.py ★★★
-          python step_a_notify.py
+          # ★★★ 正しいファイル名: job_b.py ★★★
+          python job_a.py
         env:
           DISCORD_HOOK: ${{ secrets.DISCORD_HOOK }}
       - uses: actions/upload-artifact@v4
@@ -42,8 +42,8 @@ jobs:
       - name: Install and Run
         run: |
           pip install -r requirements.txt
-          # ★★★ 正しいファイル名: step_b_simulate.py ★★★
-          python step_b_simulate.py
+          # ★★★ 正しいファイル名: job_b.py ★★★
+          python job_b.py.py
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
       - uses: actions/upload-artifact@v4
