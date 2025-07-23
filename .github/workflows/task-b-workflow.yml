@@ -3,21 +3,16 @@
 name: Step B - Simulate and Collect Data
 
 on:
-  # 【重要】トリガーを schedule から workflow_run に変更
   workflow_run:
-    # 'Step A - Fetch and Notify' という名前のワークフローを監視する
     workflows: ["Step A - Fetch and Notify"]
-    # ワークフローが「完了」したときにトリガーする
     types:
       - completed
-  
-  # 手動実行も残しておく
   workflow_dispatch:
 
 jobs:
   simulate:
     name: Simulate and Collect
-    # 【重要】トリガー元のワークフローが「成功」した場合のみ、このジョブを実行する
+    # 成功した時だけ実行する条件は維持
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -26,19 +21,30 @@ jobs:
         with:
           python-version: '3.11'
       
-      # workflow_run でトリガーされた場合、トリガー元のアーティファクトを自動で探しに行く
-      - name: Download Watchlist from triggering workflow
-        uses: actions/download-artifact@v4
+      # ★★★ ここからが重要な修正箇所 ★★★
+      # より高機能なサードパーティ製アクションを使用する
+      - name: Download Watchlist from Step A workflow
+        uses: dawidd6/action-download-artifact@v6
         with:
+          # workflow_runイベントをトリガーしたワークフローのIDを指定
+          run_id: ${{ github.event.workflow_run.id }}
+          # ダウンロードしたいアーティファクトの名前
           name: watchlist-artifact
+          # 保存先のパス
           path: output
+      # ★★★ 修正ここまで ★★★
           
+      # results-artifactのダウンロードは、以前の方法でも問題ないことが多いが、念のためこちらも合わせる
       - name: Download All Previous Results (if exists)
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v6
         with:
+          # こちらは、このワークフロー（Step B）の最新の成功した実行から探す
+          workflow: ${{ github.workflow }}
+          # 成功した実行に限定
+          workflow_conclusion: success
           name: results-artifact
           path: output
-        continue-on-error: true
+        # このアクションは、アーティファクトが見つからない場合、デフォルトで失敗しないので continue-on-error は不要
 
       - name: Install dependencies and Run task_b
         run: |
